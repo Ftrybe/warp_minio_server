@@ -46,9 +46,9 @@ cargo build --release
 		}
 ```
 
-服务需要配合oss-config使用, 站点自定义域名`SITE_DOMAIN`, 例如与上述nginx匹配的配置为 `http://47.101.203.23:9090/prefix/config-key`
+服务需要配合oss-config使用, 站点自定义域名`SITE_DOMAIN`, 例如与上述nginx匹配的配置为 `http://127.0.0.1:9090/prefix/config-key`
 
-启动时设置环境变量WARP_MINIO_CONFIG可以自定义配置。
+启动时设置环境变量WARP_MINIO_CONFIG_PATH可以自定义配置。
 
 
 ### mac编译windows可执行文件

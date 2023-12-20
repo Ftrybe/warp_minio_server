@@ -24,9 +24,8 @@ use r2d2::Pool;
 use reqwest::Method;
 
 use std::collections::HashMap;
-use std::env;
-use std::fs::File;
-use std::io::BufReader;
+use std::{env, fs};
+use std::path::Path;
 use std::string::String;
 use std::sync::{Arc, Mutex};
 
@@ -39,12 +38,12 @@ use mime_guess::from_path;
 
 
 // 环境变量名称
-const ENV_PARAMS_NAME: &'static str = "WARP_MINIO_CONFIG_PATH";
+const CONFIG_PATH_KEY: &'static str = "WARP_MINIO_CONFIG_PATH";
 
 const BEARER_PREFIX_LEN: usize = 7;
 
 // redis数据库路径 9为选择数据库
-const REDIS_URL: &'static str = "redis://127.0.0.1/9";
+const REDIS_URL: &'static str = "redis://127.0.0.1/0";
 
 // 文件路径前缀
 const URL_PREFIX: &'static str = "/minio";
@@ -58,20 +57,15 @@ const PORT: u16 = 9928;
 // 全局静态变量连接池
 lazy_static! {
 
-     static ref WARP_MINIO_CONFIG: WarpMinioConfig = match env::var(ENV_PARAMS_NAME.to_string()) {
-        Ok(path) => {
-            // 读取和解析配置文件
-            let file = match File::open(&path.to_string()) {
-                Ok(file) => file,
-                Err(e) => return WarpMinioConfig::default(),  // 返回空的配置
-            };
-            let reader = BufReader::new(file);
-            match serde_json::from_reader(reader) {
-                Ok(config) => config,
-                Err(e) => WarpMinioConfig::default(),  // 返回空的配置
-            }
-        },
-        Err(_e) => WarpMinioConfig::default(),  // 返回空的配置
+     static ref WARP_MINIO_CONFIG: WarpMinioConfig = {
+        let config_path = env::var(CONFIG_PATH_KEY).unwrap_or_else(|_| "config.json".to_string());
+        let path = Path::new(&config_path);
+        let config = fs::read_to_string(path)
+            .map_err(|e| eprintln!("Failed to read config file: {}", e))
+            .and_then(|content| serde_json::from_str(&content)
+                .map_err(|e| eprintln!("Failed to parse config file: {}", e)))
+            .unwrap_or_else(|_| WarpMinioConfig::default());
+        config
     };
 
     static ref CLIENT: reqwest::Client = reqwest::Client::builder()
