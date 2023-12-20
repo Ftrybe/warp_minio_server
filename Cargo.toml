@@ -1,0 +1,24 @@
+[package]
+name = "warp_minio_server"
+version = "0.1.0"
+edition = "2021"
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+minio = "0.1.0"
+redis = "0.24.0"
+r2d2_redis = "0.14"
+r2d2 = "0.8.10"
+jsonwebtoken = "9.2.0"
+url = "2.4.1"
+hyper = "1.1.0"
+tokio = { version = "1.0.0", features = ["rt", "rt-multi-thread", "macros"] }
+lazy_static = "1.4.0"
+serde_json = "1.0.107"
+serde = { version = "1.0.188", features = ["derive"] }
+log = "0.4.20"
+env_logger = "0.10.0"
+warp = "0.3.6"
+bytes = "1.5.0"
+mime_guess = "2.0.4"
+reqwest = "0.11.22"
