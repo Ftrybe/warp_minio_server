@@ -116,16 +116,24 @@ async fn process(
         client_request
     };
 
+    // 发送请求并获取异步的响应流
     let response = client_request.send().await.map_err(|_| warp::reject::reject())?;
     let status = response.status();
+    // let headers = response.headers().clone();
+    let headers = &response.headers().clone();
+    // 使用 `hyper::Body::wrap_stream` 将响应流转换为 warp 可以发送的 Body
+    let stream = response.bytes_stream();
+    let body = warp::hyper::Body::wrap_stream(stream);
+
     let mut response_builder = warp::http::Response::builder().status(status);
 
-    for (key, value) in response.headers() {
+    for (key, value) in headers {
         response_builder = response_builder.header(key, value);
     }
 
+    // 如果设置了重新解析 Content-Type
     if config::WARP_MINIO_CONFIG.re_parsing_content_type {
-        let content_type = re_parse_content_type(&response.headers(), key);
+        let content_type = re_parse_content_type(&headers, key);
         response_builder = response_builder.header("Content-Type", content_type);
     }
 
@@ -135,7 +143,7 @@ async fn process(
     }
 
     let response = response_builder
-        .body(response.bytes().await.map_err(|_| warp::reject::reject())?)
+        .body(body)
         .map_err(|_| warp::reject::reject())?;
 
     Ok(Box::new(response) as Box<dyn warp::Reply>)
