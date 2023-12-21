@@ -1,14 +1,24 @@
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use lazy_static::lazy_static;
 use minio::s3::client::Client;
 use minio::s3::creds::StaticProvider;
 use minio::s3::http::BaseUrl;
+use r2d2::Pool;
+use crate::minio_parser;
 use reqwest::Method;
 use crate::{cache, config};
+use crate::r2d2_minio::MinioConnectionManager;
+
+lazy_static!(
+    static ref MINIO_POOLS: Arc<Mutex<HashMap<String, Pool<MinioConnectionManager>>>> = {
+        Arc::new(Mutex::new(HashMap::new()))
+    };
+);
+
 
 fn get_config_by_json_key(config_key: &str) -> Option<config::MinioConfig> {
-    if let Some(power_map) = &config::WARP_MINIO_CONFIG.power {
-        return power_map.get(config_key).cloned(); // 使用 cloned 方法来克隆 MinioConfig
-    }
-    None
+    config::WARP_MINIO_CONFIG.power.as_ref()?.get(config_key).cloned()
 }
 
 pub async fn get_generate_link_by_config_key_and_object_key(
@@ -38,67 +48,67 @@ pub async fn get_generate_link_by_config_key_and_object_key(
     Ok(link)
 }
 
-// 生成分享链接
 async fn generate_minio_share_link(
     config_json: &config::MinioConfig,
     object: &str,
 ) -> Result<String, minio::s3::error::Error> {
-    // 假设 WARP_MINIO_CONFIG.minio_base_url 是 Option<String> 类型
-
-    let client =  get_minio_client(
-        config_json.access_key.as_str(),
-        config_json.secret_key.as_str(),
-        config_json.endpoint.as_str(),
-    );
-
-    let bucket_name = &config_json.bucket_name;
-
-    let args = minio::s3::args::GetPresignedObjectUrlArgs::new(bucket_name, object, Method::GET)
-        .map_err(|e| {
-            minio::s3::error::Error::UrlBuildError(format!("Failed to create args: {}", e))
-        })?;
-
-    let r = client.unwrap().get_presigned_object_url(&args).await.map_err(|e| {
-        minio::s3::error::Error::UrlBuildError(format!("Failed to get presigned url: {}", e))
-    })?;
-
-    Ok(r.url)
-}
-
-fn get_minio_client(access_key: &str, secret_key: &str, endpoint: &str) -> Option<Client> {
-    let base_url: Result<BaseUrl, _> = endpoint.parse();
-    // 解析失败返回空
-    if base_url.is_err() {
-        return None;
+    let pool = get_minio_client(&config_json.config_key);
+    if pool.is_none() {
+        return Err(minio::s3::error::Error::UrlBuildError("Failed to create client".to_string()));
     }
-    // 获取BaseUrl
-    let provider = StaticProvider::new(access_key, secret_key, None);
-    let client = Client::new(base_url.unwrap(), Some(Box::new(provider)), None, None)
-        .map_err(|e| format!("Failed to create client: {}", e))
-        .ok()?;
-    Some(client)
+    let client = pool.unwrap().get().expect("Failed to get connection from pool");
+
+    let args = minio::s3::args::GetPresignedObjectUrlArgs::new(&config_json.bucket_name, object, Method::GET)?;
+    client.get_presigned_object_url(&args).await.map(|r| r.url)
 }
 
+fn get_minio_client(config_key: &str) ->Option<Pool<MinioConnectionManager>>{
+    let pools = MINIO_POOLS.lock().unwrap();
+    match pools.get(config_key) {
+        Some(pool) => Some(pool.clone()),
+        None => None,
+    }
 
-// fn initialize_minio_pools() -> Result<(), String> {
-//     let mut pools = MINIO_POOLS.lock().unwrap();
-//
-//     for (key, config) in WARP_MINIO_CONFIG.power.as_ref().ok_or("Power is None")? {
-//         if pools.get(key).is_none() {
-//             let provider = StaticProvider::new(
-//                 config.access_key.as_str(),
-//                 config.secret_key.as_str(),
-//                 None,
-//             );
-//             let client = Client::new(
-//                 config.endpoint.as_str(),
-//                 Some(Box::new(provider)),
-//                 None,
-//                 None,
-//             )
-//             .map_err(|e| format!("Failed to create client: {}", e))?;
-//             pools.insert(key.clone(), client);
-//         }
-//     }
-//     Ok(())
-// }
+}
+
+pub fn initialize_minio_pools() {
+    let mut pools = match MINIO_POOLS.lock() {
+        Ok(pools) => pools,
+        Err(_) => {
+            log::error!("Failed to lock MINIO_POOLS");
+            return;
+        }
+    };
+
+    let config_power = match config::WARP_MINIO_CONFIG.power.as_ref() {
+        Some(power) => power,
+        None => {
+            log::error!("Power configuration is missing");
+            return;
+        }
+    };
+
+    for (key, config) in config_power {
+        if pools.contains_key(key) {
+            continue;  // 如果池子已经存在，跳过当前迭代
+        }
+
+        let manager = MinioConnectionManager::new(
+            config.endpoint.clone(),
+            config.access_key.clone(),
+            config.secret_key.clone()
+        );
+
+        let pool = match r2d2::Pool::builder().max_size(50).build(manager) {
+            Ok(pool) => pool,
+            Err(_) => {
+                log::error!("Redis pool creation failed for key: {}", key);
+                continue;
+            }
+        };
+
+        pools.insert(key.clone(), pool);
+    }
+    log::info!("MinIO pools initialization completed");
+}
+
