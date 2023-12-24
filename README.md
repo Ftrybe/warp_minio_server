@@ -1,8 +1,6 @@
 # 说明
 
-warp_minio_server 是一个rust脚本，用于自签名minio附件。脚本与业务代码有较强的耦合性。如果需要适配其他系统需要自行研究修改。
-
-因时间问题，本脚本只能确定服务可用，不能确定在高并发场景下是否存在性能问题。需要在以后的项目中实践。
+warp_minio_server 是一个rust脚本，用于自签名minio附件。
 
 > main.rs 主程序入口  
 > Cargo.toml 依赖管理
@@ -73,25 +71,43 @@ cargo build --target aarch64-unknown-linux-gnu --release
 ```
 
 ### MINIO配置参数
-```json
-{
-  "serverPort": 9928, // rust 对外服务端口
-  "minioBaseUrl": "http://127.0.0.1:9090", // minio默认服务地址
-  "matchPrefix": "/minio", // 匹配前缀
-  "defaultRedisUrl": "redis://127.0.0.1/9", // 默认redis地址
-  "disabledAuth": true, // 是否禁用认证
-  "enable": false, // 是否启用
-  "power": { // 桶配置
-    "configKey" :  [{
-      "configKey": "configKey",
-      "accessKey": "accessKey",
-      "secretKey": "secretKey",
-      "bucketName": "bucketName",
-      "endpoint": "127.0.0.1:9090",
-      "redisUrl": "redis://127.0.0.1/9"
-    }]
-  }
-}
+```yaml
+server-port: 9928
+match-prefix: /minio
+parsing-content-type: false
+auth-type: None
+default:
+  bucket-name: atom
+  minio-config:
+    access-key: accessKey
+    secret-key: secretKey
+    endpoint: http://127.0.0.1:9090
+    max-pool-size: 20
+    idle-pool-size: 5
+  redis-config:
+    host: http://127.0.0.1
+    port: 6379
+    db: 9
+power:
+  minio-atom:
+    bucket-name: atom
+    minio-config:
+      - access-key: accessKey
+        secret-key: secretKey
+        endpoint: http://127.0.0.1:9090
+        max-pool-size: 20
+        idle-pool-size: 5
+    redis-config:
+      - host: http:127.0.0.1
+        port: 6379
+        db: 9
+        password: ''
+        max-pool-size: 20
+        idle-pool-size: 5
+    convert:
+      accessKey: access-key
+      secretKey: secret-key
+      maxPoolSize: max-pool-size
+      idlePoolSize: idle-pool-size
+      bucketName: bucket-name
 ```
-
-[redis参数说明](https://docs.rs/redis/0.9.1/redis/#connection-parameters)

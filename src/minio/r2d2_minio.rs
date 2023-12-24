@@ -1,7 +1,7 @@
 use minio::s3::client::Client;
 use minio::s3::creds::StaticProvider;
 use minio::s3::error::Error as MinioError;
-use r2d2::{ManageConnection, Pool};
+use r2d2::ManageConnection;
 
 pub(crate) struct MinioConnectionManager {
     endpoint: String,

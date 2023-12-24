@@ -1,34 +1,24 @@
+use std::collections::HashMap;
+use std::env;
+use std::string::String;
+
+use lazy_static::lazy_static;
+use mime_guess::from_path;
+use warp::{Filter, Rejection};
+use warp::http::HeaderMap;
+
+use crate::auth::{error_reply, ErrorReply};
 
 mod config;
 mod auth;
 mod cache;
-mod minio_parser;
-mod r2d2_minio;
-
-use lazy_static::lazy_static;
-
-use minio::s3::client::Client;
-
-use std::collections::HashMap;
-use std::{env};
-use std::string::String;
-use std::sync::{Arc, Mutex};
-
-use warp::{Filter, Rejection};
-use auth::unauthorized_reply;
-use mime_guess::from_path;
-use warp::http::HeaderMap;
-
+mod minio;
 
 // 全局静态变量连接池
 lazy_static! {
     static ref CLIENT: reqwest::Client = reqwest::Client::builder()
         .build()
         .unwrap();
-
-    static ref MINIO_POOLS: Arc<Mutex<HashMap<String, Client>>> = {
-        Arc::new(Mutex::new(HashMap::new()))
-    };
 }
 
 #[tokio::main]
@@ -36,16 +26,13 @@ async fn main() {
     env::set_var("RUST_LOG", "info");
     env_logger::init();
     cache::initialize_redis_pools();
-    minio_parser::initialize_minio_pools();
+    minio::minio_pool::initialize_minio_pools().await;
 
     let cors = warp::cors()
         .allow_any_origin();
 
-    let optional_auth_header = warp::header::optional("authorization");
-
     let route = warp::path::full()
         .and(warp::query::<HashMap<String, String>>())
-        .and(optional_auth_header)
         .and(warp::method())
         .and(warp::header::headers_cloned())
         .and_then(process)
@@ -61,18 +48,20 @@ async fn main() {
     }
 
     log::info!(
-        "Auth is disabled: {}",
-        config::WARP_MINIO_CONFIG.disabled_auth.to_string()
+    "Auth type: {}",
+    config::WARP_MINIO_CONFIG.auth_type
+        .as_ref()
+        .map_or("None".to_string(), |auth_type| auth_type.to_string())
     );
 
     warp::serve(route).run(([127, 0, 0, 1], server_port)).await;
 }
+
 async fn process(
     path: warp::path::FullPath,
     params: HashMap<String, String>,
-    header: Option<String>,
     _method: warp::http::Method,
-    headers: warp::http::HeaderMap,
+    headers: HeaderMap,
 ) -> Result<Box<dyn warp::Reply>, Rejection> {
     let request_uri = path.as_str();
 
@@ -92,20 +81,20 @@ async fn process(
     let path = bucket_path.trim_start_matches('/');
     let mut parts = path.splitn(2, '/');
     let config_key = parts.next().unwrap_or("");
-    let key = parts.next().unwrap_or("");
+    let object_key = parts.next().unwrap_or("");
     let filename = params.get("filename");
 
     log::info!("Access: {}", request_uri);
 
-    if !auth::auth_header_bearer(header, config_key) {
-        return unauthorized_reply();
+    if !auth::check(headers.clone(), config_key) {
+        return error_reply(ErrorReply::Unauthorized);
     }
 
-    let link = match minio_parser::get_generate_link_by_config_key_and_object_key(config_key, key).await {
+    let link = match minio::minio_parser::get_generate_link_by_config_key_and_object_key(config_key, object_key).await {
         Ok(token) => token,
         Err(e) => {
             log::error!("Failed to generate link: {}", e);
-            return unauthorized_reply()
+            return error_reply(ErrorReply::MinioInvalid);
         }
     };
 
@@ -132,8 +121,8 @@ async fn process(
     }
 
     // 如果设置了重新解析 Content-Type
-    if config::WARP_MINIO_CONFIG.re_parsing_content_type {
-        let content_type = re_parse_content_type(&headers, key);
+    if config::WARP_MINIO_CONFIG.parsing_content_type {
+        let content_type = re_parse_content_type(&headers, object_key);
         response_builder = response_builder.header("Content-Type", content_type);
     }
 
@@ -150,8 +139,8 @@ async fn process(
 }
 
 
-fn re_parse_content_type(headers: &&HeaderMap, key: &str ) -> String {
-     headers.get("Content-Type")
+fn re_parse_content_type(headers: &&HeaderMap, key: &str) -> String {
+    headers.get("Content-Type")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string())
         .map(|ct| {

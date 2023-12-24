@@ -1,0 +1,38 @@
+server-port: 9928
+match-prefix: /minio
+parsing-content-type: false
+auth-type: None
+default:
+  bucket-name: atom
+  minio-config:
+    access-key: accessKey
+    secret-key: secretKey
+    endpoint: http://127.0.0.1:9090
+    max-pool-size: 20
+    idle-pool-size: 5
+  redis-config:
+    host: http://127.0.0.1
+    port: 6379
+    db: 9
+power:
+  minio-atom:
+    bucket-name: atom
+    minio-config:
+      - access-key: accessKey
+        secret-key: secretKey
+        endpoint: http://127.0.0.1:9090
+        max-pool-size: 20
+        idle-pool-size: 5
+    redis-config:
+      - host: http:127.0.0.1
+        port: 6379
+        db: 9
+        password: ''
+        max-pool-size: 20
+        idle-pool-size: 5
+    convert:
+      accessKey: access-key
+      secretKey: secret-key
+      maxPoolSize: max-pool-size
+      idlePoolSize: idle-pool-size
+      bucketName: bucket-name

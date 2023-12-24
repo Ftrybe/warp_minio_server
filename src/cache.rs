@@ -1,96 +1,72 @@
-
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
+
 use lazy_static::lazy_static;
+use r2d2::Pool;
 use r2d2_redis::redis::{Commands, RedisResult};
 use r2d2_redis::RedisConnectionManager;
-use r2d2::Pool;
-use crate::config;
+
+use crate::{cache, config};
+use crate::config::redis_config::RedisConfig;
+use crate::config::WARP_MINIO_CONFIG;
 
 // 全局静态变量连接池
 lazy_static! {
-    static ref REDIS_POOLS: Arc<Mutex<HashMap<String, Pool<RedisConnectionManager>>>> = {
-        Arc::new(Mutex::new(HashMap::new()))
+    static ref REDIS_POOLS: Arc<RwLock<HashMap<String, Pool<RedisConnectionManager>>>> = {
+        Arc::new(RwLock::new(HashMap::new()))
     };
 }
 
 pub fn initialize_redis_pools() {
-    let mut pools = match REDIS_POOLS.lock() {
-        Ok(pools) => pools,
-        Err(_) => {
-            log::error!("Failed to lock REDIS_POOLS");
-            return;
+
+    // default config
+    match &WARP_MINIO_CONFIG.default.redis_config {
+        None => log::info!("Redis default config is None"),
+        Some(vcr) => {
+            insert_pool(vcr);
         }
-    };
-
-    let config_power = match config::WARP_MINIO_CONFIG.power.as_ref() {
-        Some(power) => power,
-        None => {
-            log::error!("Power configuration is missing");
-            return;
-        }
-    };
-
-    for (key, config) in config_power {
-        if pools.contains_key(key) {
-            continue;  // 如果已存在相应的连接池，跳过当前迭代
-        }
-
-        let redis_url = match config.redis_url.as_deref() {
-            Some(url) => url,
-            None => {
-                log::error!("No Redis URL specified for key: {}", key);
-                continue;
-            }
-        };
-
-        let manager = match RedisConnectionManager::new(redis_url) {
-            Ok(manager) => manager,
-            Err(_) => {
-                log::error!("Redis connection manager creation failed for key: {}", key);
-                continue;
-            }
-        };
-
-        let pool = match r2d2::Pool::builder().max_size(50).build(manager) {
-            Ok(pool) => pool,
-            Err(_) => {
-                log::error!("Redis pool creation failed for key: {}", key);
-                continue;
-            }
-        };
-
-        pools.insert(key.clone(), pool);
-        log::info!("Redis pool created for key: {}", key);
     }
+
+    insert_pool(&WARP_MINIO_CONFIG.power_redis_configs());
 
     log::info!("Redis pool initialization completed");
 }
 
-// 根据token 获取redis中的用户信息
-pub fn fetch_user_info_from_redis(config_key: &str, token: &str) -> RedisResult<Option<String>> {
-    // 从连接池获取连接
-    let pool = get_redis_pool(config_key);
-    if pool.is_none() {
-        return Ok(None);
+fn insert_pool(config_redis: &Vec<RedisConfig>) {
+    let mut pools = REDIS_POOLS.write().unwrap();
+
+    for config in config_redis {
+
+        let manager = match RedisConnectionManager::new(config.redis_url()) {
+            Ok(manager) => manager,
+            Err(_) => {
+                continue;
+            }
+        };
+
+        let pool = match Pool::builder()
+            .min_idle(config.idle_pool_size)
+            .max_size(config.max_pool_size.unwrap_or(8))
+            .build(manager) {
+            Ok(pool) => pool,
+            Err(_) => {
+                log::error!("Redis pool creation failed for key: {}", config.pool_key());
+                continue;
+            }
+        };
+        pools.insert(format!("{}", config.pool_key()), pool);
     }
-    let mut con = pool
-        .unwrap()
-        .get()
-        .expect("Failed to get connection from pool");
-    let user_token_key = format!("Authorization:login:token:{}", token);
-    // 使用连接执行Redis GET命令
-    con.get(&user_token_key)
 }
+
 
 // 获取minio配置
 pub fn get_minio_config(config_key: &str) -> RedisResult<Option<String>> {
-    let pool = get_redis_pool(config_key);
-    if pool.is_none() {
-        return Ok(None);
-    }
+    let pool = match cache::get_redis_pool(config_key) {
+        Ok(pool) => pool,
+        Err(_) => return Ok(None)
+    };
+
     let mut con = pool
-        .unwrap()
         .get()
         .expect("Failed to get connection from pool");
     let minio_config_key = format!("{}{}", config::MINIO_CONFIG_KEY_PREFIX, config_key);
@@ -98,10 +74,9 @@ pub fn get_minio_config(config_key: &str) -> RedisResult<Option<String>> {
 }
 
 
-fn get_redis_pool(key: &str) -> Option<Pool<RedisConnectionManager>> {
-    let pools = REDIS_POOLS.lock().unwrap();
-    match pools.get(key) {
-        Some(pool) => Some(pool.clone()),
-        None => None,
-    }
+pub fn get_redis_pool(key: &str) -> Result<Pool<RedisConnectionManager>, String> {
+    let pools = REDIS_POOLS.read().map_err(|e| e.to_string())?;
+    pools.get(key)
+        .cloned()
+        .ok_or_else(|| format!("No Redis pool found for key: {}", key))
 }
