@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-
+use rand::{thread_rng, seq::SliceRandom};
 use serde::Deserialize;
 
 use crate::auth::AuthType;
@@ -37,6 +37,24 @@ impl WarpConfig {
             }
         }
         redis_configs
+    }
+
+    pub fn get_redis_by_config_key(&self, config_key: &str) -> Option<RedisConfig> {
+        if let Some(power) = &self.power {
+            if let Some(power_config) = power.get(config_key) {
+                if let Some(redis_configs) = &power_config.redis_config {
+                    // 从 power 对应的键中的配置列表随机选择一个
+                    return redis_configs.choose(&mut thread_rng()).cloned();
+                }
+            }
+        }
+
+        // 如果在 power 中找不到，从默认配置中随机选择一个
+        if let Some(redis_configs) = &self.default.redis_config {
+            return redis_configs.choose(&mut thread_rng()).cloned();
+        }
+
+        None
     }
 
     pub fn bucket_name(&self, config_key: String) -> Option<String> {

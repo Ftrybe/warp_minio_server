@@ -2355,6 +2355,7 @@ dependencies = [
  "minio",
  "r2d2",
  "r2d2_redis",
+ "rand",
  "redis 0.24.0",
  "reqwest",
  "serde",

@@ -15,7 +15,7 @@ pub fn check(auth_header: HeaderMap, config_key: &str) -> bool {
         None => true,
         Some(auth) => {
             match auth {
-                AuthType::Bearer => auth_header_bearer(auth_header, config_key),
+                AuthType::Bearer(redis_key) => auth_header_bearer(auth_header, &redis_key, config_key),
                 AuthType::Basic(params_key, params_value) => {
                     // 确保这里是引用或复制，以避免移动
                     auth_header_basic(auth_header, params_key, params_value)
@@ -34,7 +34,7 @@ fn auth_header_basic(headers: HeaderMap, params_key: &String, params_value: &Str
     false
 }
 
-fn auth_header_bearer(headers: HeaderMap, config_key: &str) -> bool {
+fn auth_header_bearer(headers: HeaderMap, redis_key: &str ,config_key: &str) -> bool {
     let auth_header = headers.get("authorization");
 
     let auth_str = match auth_header {
@@ -51,13 +51,14 @@ fn auth_header_bearer(headers: HeaderMap, config_key: &str) -> bool {
         None => return false,
     };
 
-    match fetch_user_info_from_redis(config_key, token) {
+    match fetch_user_info_from_redis( config_key,redis_key, token) {
         Ok(Some(_)) => true,
         _ => false,
     }
 }
 // 根据token 获取redis中的用户信息
-pub fn fetch_user_info_from_redis(config_key: &str, token: &str) -> RedisResult<Option<String>> {
+pub fn fetch_user_info_from_redis(config_key: &str,redis_key: &str, token: &str) -> RedisResult<Option<String>> {
+
     // 从连接池获取连接
     let pool = match cache::get_redis_pool(config_key) {
         Ok(pool) => pool,
@@ -67,7 +68,9 @@ pub fn fetch_user_info_from_redis(config_key: &str, token: &str) -> RedisResult<
     let mut con = pool
         .get()
         .expect("Failed to get connection from pool");
-    let user_token_key = format!("Authorization:login:token:{}", token);
+
+    // redis_key => "Authorization:login:token:{}"
+    let user_token_key = format!("{}{}", redis_key, token);
     // 使用连接执行Redis GET命令
     con.get(&user_token_key)
 }
@@ -108,7 +111,9 @@ pub enum ErrorReply {
 
 #[derive(Deserialize, Debug)]
 pub enum AuthType {
-    Bearer,
+    // redis_key
+    Bearer(String),
+    // params_key, params_value
     Basic(String, String),
     None,
 }
@@ -116,7 +121,7 @@ pub enum AuthType {
 impl fmt::Display for AuthType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AuthType::Bearer => write!(f, "Bearer"),
+            AuthType::Bearer(_) => write!(f, "Bearer"),
             AuthType::Basic(user, pass) => write!(f, "Basic: {}, {}", user, pass),
             AuthType::None => write!(f, "None"),
         }

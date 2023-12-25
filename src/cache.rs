@@ -5,6 +5,7 @@ use lazy_static::lazy_static;
 use r2d2::Pool;
 use r2d2_redis::redis::{Commands, RedisResult};
 use r2d2_redis::RedisConnectionManager;
+use tokio::io::AsyncReadExt;
 
 use crate::{cache, config};
 use crate::config::redis_config::RedisConfig;
@@ -75,8 +76,9 @@ pub fn get_minio_config(config_key: &str) -> RedisResult<Option<String>> {
 
 
 pub fn get_redis_pool(key: &str) -> Result<Pool<RedisConnectionManager>, String> {
+    let redis = WARP_MINIO_CONFIG.get_redis_by_config_key(key);
     let pools = REDIS_POOLS.read().map_err(|e| e.to_string())?;
-    pools.get(key)
+    pools.get(&redis.unwrap().pool_key())
         .cloned()
         .ok_or_else(|| format!("No Redis pool found for key: {}", key))
 }
