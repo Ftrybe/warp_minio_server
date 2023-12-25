@@ -1,9 +1,7 @@
 # 说明
 
-warp_minio_server 是一个rust脚本，用于自签名minio附件。
+warp_minio_server 主要用于转发minio请求。通过配置文件可以配置多个minio服务，通过不同的前缀来区分不同的minio服务。
 
-> main.rs 主程序入口  
-> Cargo.toml 依赖管理
 # 安装
 
 前往[Rust官网](https://www.rust-lang.org/)下载对应的安装包
@@ -24,7 +22,7 @@ cargo build --release
 ```
 
 
-### 启动编译文件
+### 启动服务
 
 配置 WARP_MINIO_CONFIG 环境变量到 warp_minio_config.json文件
 ```shell
@@ -42,10 +40,6 @@ cargo build --release
 			proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 		}
 ```
-
-服务需要配合oss-config使用, 站点自定义域名`SITE_DOMAIN`, 例如与上述nginx匹配的配置为 `http://127.0.0.1:9090/prefix/config-key`
-
-启动时设置环境变量WARP_MINIO_CONFIG_PATH可以自定义配置。
 
 
 ### mac编译windows可执行文件
@@ -67,7 +61,6 @@ rustup target add aarch64-unknown-linux-gnu
 brew install llvm
 
 cargo build --target x86_64-pc-windows-gnu --release
-cargo build --target aarch64-unknown-linux-gnu --release
 ```
 
 ### MINIO配置参数
