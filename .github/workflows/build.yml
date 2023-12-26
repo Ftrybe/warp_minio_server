@@ -20,7 +20,7 @@ jobs:
     name: Linux x86 Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Build
         run: cargo build --release
       - name: Package
@@ -42,8 +42,8 @@ jobs:
   aarch64_build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
           profile: minimal
@@ -90,8 +90,8 @@ jobs:
   windows64_build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
           profile: minimal
