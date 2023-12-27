@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use lazy_static::lazy_static;
+use log::{log, warn};
 use minio::s3::args::ListBucketsArgs;
 use r2d2::Pool;
 use tokio::sync::RwLock;
@@ -40,14 +41,14 @@ impl MinioPool {
 
             let mut instances = self.instances.write().await;
             for (_, instance) in instances.iter_mut() {
-                    // 执行健康检查逻辑
-                    let client = match instance.pool.get() {
-                        Ok(client) => client,
-                        Err(_) => {
-                            instance.is_healthy = false;
-                            continue;
-                        }
-                    };
+                // 执行健康检查逻辑
+                let client = match instance.pool.get() {
+                    Ok(client) => client,
+                    Err(_) => {
+                        instance.is_healthy = false;
+                        continue;
+                    }
+                };
 
                 instance.is_healthy  = client.list_buckets(&ListBucketsArgs::default()).await.is_ok()
             }
@@ -84,8 +85,6 @@ pub async fn initialize_minio_pools() {
                 let power_value = power.get(power_key);
                 if let Some(minio_configs) = &power_value.unwrap().minio_config {
                     insert_pool(power_key.to_string(), minio_configs).await;
-                } else {
-
                 }
             }
         }

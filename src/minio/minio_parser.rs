@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use lazy_static::lazy_static;
 use reqwest::Method;
 use tokio::sync::RwLock;
+use crate::config::warp_config::WarpConfig;
 use crate::config::WARP_MINIO_CONFIG;
 
 use crate::minio::minio_pool::MinioPool;
@@ -48,11 +49,18 @@ async fn get_minio_bucket_by_minio_config_key(config_key: &str) -> Option<String
         return Some(name.clone());
     }
 
-    // 由于 WARP_MINIO_CONFIG.bucket_name 没有提供实现细节，这里假设它返回 Option<String>
     if let Some(bucket_name) = WARP_MINIO_CONFIG.bucket_name(config_key.to_string()) {
         let mut write_map = MINIO_KET_TO_BUCKET_MAP.write().await;
         write_map.insert(config_key.to_string(), bucket_name.clone());
         return Some(bucket_name);
+    } else {
+
+        match &WARP_MINIO_CONFIG.default.bucket_name {
+            None => { log::info!("Default bucket name is None.")}
+            Some(bucket_name) => {
+                return Some(bucket_name.clone())
+            }
+        }
     }
 
     None

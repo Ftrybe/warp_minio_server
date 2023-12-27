@@ -30,11 +30,13 @@ lazy_static! {
   pub static ref WARP_MINIO_CONFIG: WarpConfig = {
         let config_path = env::var(CONFIG_PATH_KEY).unwrap_or_else(|_| "config.yaml".to_string());
         let path = Path::new(&config_path);
+        log::info!("Config path: {:?}", path);
         let config = fs::read_to_string(path)
-            .map_err(|e| eprintln!("Failed to read config file: {}", e))
+            .map_err(|e| log::error!("Failed to read config file: {}", e))
             .and_then(|content| serde_yaml::from_str(&content)
-                .map_err(|e| eprintln!("Failed to parse config file: {}", e)))
+                .map_err(|e| log::error!("Failed to parse config file: {}", e)))
             .unwrap_or_else(|_| WarpConfig::default());
+        log::info!("Config: {:?}", config);
         config
     };
 }

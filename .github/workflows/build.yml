@@ -57,12 +57,12 @@ jobs:
           wget https://www.openssl.org/source/openssl-3.2.0.tar.gz
           tar xzf openssl-3.2.0.tar.gz
           cd openssl-3.2.0
-          ./Configure linux-aarch64  no-shared --prefix=/usr/local/aarch64
+          ./Configure no-shared no-dso --prefix=/usr/local/aarch64 linux-aarch64
           make
           sudo make install
       - name: Configure build environment
         run: |
-          echo "RUSTFLAGS=-C linker=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+          echo "RUSTFLAGS=-C linker=aarch64-linux-gnu-gcc -C link-arg=-static" >> $GITHUB_ENV
       - name: Set environment variables for OpenSSL
         run: |
           echo "OPENSSL_DIR=/usr/local/aarch64" >> $GITHUB_ENV
@@ -86,6 +86,7 @@ jobs:
         with:
           files: warp_minio_server_linux32.tar.gz
           draft: true
+
 
   windows64_build:
     runs-on: windows-latest
