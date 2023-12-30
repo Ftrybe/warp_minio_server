@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use lazy_static::lazy_static;
 use reqwest::Method;
 use tokio::sync::RwLock;
-use crate::config::warp_config::WarpConfig;
 use crate::config::WARP_MINIO_CONFIG;
 
 use crate::minio::minio_pool::MinioPool;

@@ -33,24 +33,24 @@ pub struct MinioPool {
 }
 
 impl MinioPool {
-    pub async fn perform_health_checks(&self) {
+    pub async fn perform_health_checks() {
         let mut interval = interval(Duration::from_secs(60));
-
         loop {
             interval.tick().await;
+            let mut pools = MINIO_POOLS.write().unwrap(); // 获取写锁
 
-            let mut instances = self.instances.write().await;
-            for (_, instance) in instances.iter_mut() {
-                // 执行健康检查逻辑
-                let client = match instance.pool.get() {
-                    Ok(client) => client,
-                    Err(_) => {
-                        instance.is_healthy = false;
-                        continue;
-                    }
-                };
+            for pool_instances in pools.values_mut() {
+                for instance in pool_instances {
+                    let client = match instance.pool.get() {
+                        Ok(client) => client,
+                        Err(_) => {
+                            instance.is_healthy = false;
+                            continue;
+                        }
+                    };
 
-                instance.is_healthy  = client.list_buckets(&ListBucketsArgs::default()).await.is_ok()
+                    instance.is_healthy = client.list_buckets(&ListBucketsArgs::default()).await.is_ok();
+                }
             }
         }
     }

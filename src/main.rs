@@ -8,6 +8,7 @@ use warp::{Filter, Rejection};
 use warp::http::HeaderMap;
 
 use crate::auth::{error_reply, ErrorReply};
+use crate::minio::minio_pool::{MINIO_POOLS, MinioPool};
 
 mod config;
 mod auth;
@@ -53,6 +54,12 @@ async fn main() {
         .as_ref()
         .map_or("None".to_string(), |auth_type| auth_type.to_string())
     );
+
+    // 启动健康检查任务
+    tokio::spawn(async move {
+        MinioPool::perform_health_checks().await;
+    });
+
 
     warp::serve(route).run(([127, 0, 0, 1], server_port)).await;
 }
