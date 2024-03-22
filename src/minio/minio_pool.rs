@@ -37,9 +37,8 @@ impl MinioPool {
         let mut interval = interval(Duration::from_secs(60));
         loop {
             interval.tick().await;
-            let mut pools = MINIO_POOLS.write().unwrap(); // 获取写锁
-
-            for pool_instances in pools.values_mut() {
+            let mut pools = MINIO_POOLS.write(); // 获取写锁
+            for pool_instances in pools.await.values_mut() {
                 for instance in pool_instances {
                     let client = match instance.pool.get() {
                         Ok(client) => client,

@@ -24,7 +24,7 @@ cargo build --release
 
 ### 启动服务
 
-配置 WARP_MINIO_CONFIG 环境变量到 warp_minio_config.json文件
+配置 WARP_MINIO_CONFIG_PATH 环境变量到 config.yaml文件
 ```shell
 ./warp_minio_server.exe
 ```
