@@ -1,7 +1,8 @@
 server-port: 9928
 match-prefix: /minio
 parsing-content-type: false
-auth-type: None
+auth-type:
+  bearer: ""
 default:
   bucket-name: atom
   minio-config:

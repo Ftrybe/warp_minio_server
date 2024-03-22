@@ -3,7 +3,8 @@ use std::fmt;
 use bytes::Bytes;
 use r2d2_redis::redis::{Commands, RedisResult};
 use reqwest::StatusCode;
-use serde::Deserialize;
+use serde::de::{MapAccess, Visitor};
+use serde::{de, Deserialize, Deserializer};
 use warp::http::HeaderMap;
 use warp::Rejection;
 
@@ -109,7 +110,7 @@ pub enum ErrorReply {
     MinioInvalid,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Debug)]
 pub enum AuthType {
     // redis_key
     Bearer(String),
@@ -125,5 +126,75 @@ impl fmt::Display for AuthType {
             AuthType::Basic(user, pass) => write!(f, "Basic: {}, {}", user, pass),
             AuthType::None => write!(f, "None"),
         }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(field_identifier, rename_all = "lowercase")]
+enum Field { Bearer, Basic, None }
+
+// 自定义Visitor来处理AuthType的解析
+struct AuthTypeVisitor;
+
+impl<'de> Visitor<'de> for AuthTypeVisitor {
+    type Value = AuthType;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("an object with keys `Bearer`, `Basic` or a `None` value")
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+    {
+        match value {
+            "None" => Ok(AuthType::None),
+            _ => Err(de::Error::unknown_variant(value, &["Bearer", "Basic", "None"])),
+        }
+    }
+
+    fn visit_map<V>(self, mut map: V) -> Result<Self::Value, V::Error>
+        where
+            V: MapAccess<'de>,
+    {
+        let mut bearer = None;
+        let mut basic = None;
+        while let Some(key) = map.next_key()? {
+            match key {
+                Field::Bearer => {
+                    if bearer.is_some() {
+                        return Err(de::Error::duplicate_field("Bearer"));
+                    }
+                    bearer = Some(map.next_value()?);
+                },
+                Field::Basic => {
+                    if basic.is_some() {
+                        return Err(de::Error::duplicate_field("Basic"));
+                    }
+                    let values: (String, String) = map.next_value()?;
+                    basic = Some(values);
+                },
+                Field::None => {
+                    return Err(de::Error::custom("`None` should not be a map key"));
+                }
+            }
+        }
+        let result = match (bearer, basic) {
+            (Some(token), None) => AuthType::Bearer(token),
+            (None, Some((key, value))) => AuthType::Basic(key, value),
+            (None, None) => AuthType::None,
+            _ => return Err(de::Error::custom("Expected either `Bearer` or `Basic`"))
+        };
+        Ok(result)
+    }
+}
+
+// 为AuthType实现Deserialize trait
+impl<'de> Deserialize<'de> for AuthType {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: Deserializer<'de>,
+    {
+        deserializer.deserialize_any(AuthTypeVisitor)
     }
 }
