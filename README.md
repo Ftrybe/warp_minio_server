@@ -119,9 +119,9 @@ auth-type: None
 *   **match-prefix**: 用于匹配传入请求的 URL 路径前缀。这里设置为 `/minio`。
 *   **parsing-content-type**: 是否根据后缀重新解析`content-type`,使用`mime_guess`解析。在此配置中设置为 `false`。
 *   **auth-type**: 使用的认证类型。当前设置为 `None`，表示没有认证。
-    * `None`表示没有认证，
-    * `Bearer(key)`将获取Header中的Authorization字段,去除`Bearer `前缀后字符串从redis中查看是否存在数据验证权限。如：设置为`Bearer(SYS:USER:)`请求头`Authorization: Bearer 12333111`，将从redis中查看`SYS:USER:12333111`是否存在，存在则验证通过，否则验证失败。
-    * `Basic(params_key,params_value)` 获取请求头中，key为`params_key`的值，验证是否和设置的params_value是否一致，一致则通过验证
+    * `none`表示没有认证，
+    * `bearer(key)`将获取Header中的Authorization字段,去除`Bearer `前缀后字符串从redis中查看是否存在数据验证权限。如：设置为`Bearer(SYS:USER:)`请求头`Authorization: Bearer 12333111`，将从redis中查看`SYS:USER:12333111`是否存在，存在则验证通过，否则验证失败。
+    * `basic(params_key,params_value)` 获取请求头中，key为`params_key`的值，验证是否和设置的params_value是否一致，一致则通过验证
 
 #### 默认配置
 

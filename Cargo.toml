@@ -5,7 +5,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-minio = "0.1.0"
 redis = "0.24.0"
 r2d2_redis = "0.14"
 r2d2 = "0.8.10"
@@ -24,3 +23,5 @@ bytes = "1.5.0"
 mime_guess = "2.0.4"
 reqwest = "0.11.22"
 rand = "0.8.5"
+
+minio = { git = "https://github.com/minio/minio-rs.git" , branch = "master"}
